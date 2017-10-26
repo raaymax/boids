@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html" charset="utf-8"/>
+    <title>Babylon - Getting Started</title>
+    <!--- link to the last version of babylon --->
+    <script src="babylon.custom.js"></script>
+    <script src="babylon.inspector.js"></script>
+    <script src="boid.js"></script>
+    <style>
+        html, body {
+            overflow: hidden;
+            width   : 100%;
+            height  : 100%;
+            margin  : 0;
+            padding : 0;
+        }
+
+        #renderCanvas {
+            width   : 100%;
+            height  : 100%;
+            touch-action: none;
+        }
+    </style>
+</head>
+<body>
+<canvas id="renderCanvas"></canvas>
+<script>
+    window.addEventListener('DOMContentLoaded', function(){
+        // get the canvas DOM element
+        var canvas = document.getElementById('renderCanvas');
+
+        // load the 3D engine
+        var engine = new BABYLON.Engine(canvas, true);
+
+        var Boids = new Environment(500);
+        var camera;
+
+        // createScene function that creates and return the scene
+        var createScene = function(){
+            var scene = new BABYLON.Scene(engine);
+            camera = new BABYLON.UniversalCamera('camera1', new BABYLON.Vector3(0, 0,-150), scene);
+            camera.setTarget(BABYLON.Vector3.Zero());
+            camera.attachControl(canvas, false);
+            var light = new BABYLON.HemisphericLight('light1', new BABYLON.Vector3(0,1,0), scene);
+
+            var arr = Boids.boids.map(boid =>{
+                var sphere = BABYLON.MeshBuilder.CreateCylinder('sphere'+boid.id, {diameterTop: 0, tessellation: 4}, scene);
+                boid.s = sphere;
+                sphere.position.x = boid.pos.x;
+                sphere.position.y = boid.pos.y;
+                sphere.position.z = boid.pos.z;
+                return sphere;
+            });
+
+
+            var myMaterial = new BABYLON.StandardMaterial("ground_material", scene);
+            myMaterial.alpha = 0.0;
+            var ground = BABYLON.Mesh.CreateGround('ground1',1000, 1000, 2, scene);
+            ground.material = myMaterial;
+            ground.rotate(BABYLON.Axis.X, -Math.PI/2, BABYLON.Space.WORLD);
+
+            ground.position.z = 50;
+
+            return scene;
+        }
+
+        // call the createScene function
+        var scene = createScene();
+
+        // run the render loop
+        engine.runRenderLoop(function(){
+            //return;
+            Boids.update();
+            Boids.boids.forEach(boid=>{
+                boid.i = boid.i || 1;
+
+                let x = boid.velocity.x;
+                let y = boid.velocity.y;
+                let z = boid.velocity.z;
+
+                if(x!=0 && y!= 0) {
+                    boid.s.rotation.z = -Math.atan2(x, y);
+                }
+                if(z!=0 && x !=0) {
+                    if (boid.s.rotation.z < 0) {
+                        boid.s.rotation.y = -Math.atan2(z, x) + Math.PI * 2;
+                    } else {
+                        boid.s.rotation.y = Math.atan2(z, -x);
+                    }
+                }
+
+                boid.s.position = boid.pos;
+            });
+            scene.render();
+        });
+
+        scene.onPointerMove = function () {
+            let p = scene.pick(scene.pointerX, scene.pointerY);
+            Boids.cursor(p.pickedPoint, camera.position);
+        };
+
+        scene.debugLayer.show();
+
+
+        // the canvas/window resize event handler
+        window.addEventListener('resize', function(){
+            engine.resize();
+        });
+    });
+</script>
+</body>
+</html>
