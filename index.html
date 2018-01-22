@@ -5,7 +5,7 @@
     <title>Babylon - Getting Started</title>
     <!--- link to the last version of babylon --->
     <script src="babylon.custom.js"></script>
-    <script src="babylon.inspector.js"></script>
+    <!--<script src="babylon.inspector.js"></script>-->
     <script src="boid.js"></script>
     <style>
         html, body {
@@ -21,10 +21,34 @@
             height  : 100%;
             touch-action: none;
         }
+
+        #fps{
+            position: fixed;
+            right: 0;
+            top:0;
+            background-color: white;
+            width: 50px;
+            height: 30px;
+        }
     </style>
 </head>
 <body>
 <canvas id="renderCanvas"></canvas>
+<div id="fps"></div>
+<!--
+
+<script>
+    var Boids = new Environment(500);
+    let startTime = new Date();
+    let count = 1000;
+    for(var i = 0; i < count; i++) {
+        Boids.update();
+    }
+    let endTime = new Date();
+
+    console.log(1000/((endTime - startTime)/count));
+</script>
+-->
 <script>
     window.addEventListener('DOMContentLoaded', function(){
         // get the canvas DOM element
@@ -33,7 +57,7 @@
         // load the 3D engine
         var engine = new BABYLON.Engine(canvas, true);
 
-        var Boids = new Environment(500);
+        var swarm = new Swarm(500);
         var camera;
 
         // createScene function that creates and return the scene
@@ -44,7 +68,7 @@
             camera.attachControl(canvas, false);
             var light = new BABYLON.HemisphericLight('light1', new BABYLON.Vector3(0,1,0), scene);
 
-            var arr = Boids.boids.map(boid =>{
+            var arr = swarm.boids.map(boid =>{
                 var sphere = BABYLON.MeshBuilder.CreateCylinder('sphere'+boid.id, {diameterTop: 0, tessellation: 4}, scene);
                 boid.s = sphere;
                 sphere.position.x = boid.pos.x;
@@ -71,10 +95,9 @@
         // run the render loop
         engine.runRenderLoop(function(){
             //return;
-            Boids.update();
-            Boids.boids.forEach(boid=>{
-                boid.i = boid.i || 1;
-
+            document.getElementById('fps').innerHTML = engine.getFps().toFixed();
+            swarm.update();
+            swarm.boids.forEach(boid=>{
                 let x = boid.velocity.x;
                 let y = boid.velocity.y;
                 let z = boid.velocity.z;
@@ -90,17 +113,19 @@
                     }
                 }
 
-                boid.s.position = boid.pos;
+                boid.s.position.x = boid.pos.x;
+                boid.s.position.y = boid.pos.y;
+                boid.s.position.z = boid.pos.z;
             });
             scene.render();
         });
 
         scene.onPointerMove = function () {
-            let p = scene.pick(scene.pointerX, scene.pointerY);
-            Boids.cursor(p.pickedPoint, camera.position);
+            //let p = scene.pick(scene.pointerX, scene.pointerY);
+            //Boids.cursor(p.pickedPoint, camera.position);
         };
 
-        scene.debugLayer.show();
+        //scene.debugLayer.show();
 
 
         // the canvas/window resize event handler

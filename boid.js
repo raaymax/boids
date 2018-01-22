@@ -1,12 +1,13 @@
 
 
-const GROUP_RADIUS = 50.0;
-const AVOID_RADIUS = 5.0;
-const UPDATE_RATE = 0.08;
+const GROUP_RADIUS = 5.0;
+const AVOID_RADIUS = 3.0;
+const UPDATE_RATE = 0.05;
 const SPEED_LIMIT = 10.0;
 const BOUNDARY = 50.0;
-const AVOID_CURSOR_RADIUS = 100.0;
-const Vec = BABYLON.Vector3;
+const AVOID_CURSOR_RADIUS = 10.0;
+
+/*const Vec = BABYLON.Vector3;
 
 Vec.rand = function(scale){
     let v = new Vec();
@@ -15,20 +16,140 @@ Vec.rand = function(scale){
     v.z = Math.random()*2-1;
     return v.scaleInPlace(scale);
 };
+*/
 
 
-class Environment{
+class Vec{
+    constructor(x=0,y=0,z=0){
+        this.data = [x,y,z];
+    }
+
+    static Zero(){
+        return new Vec();
+    }
+
+    static Distance(v1,v2){
+        return v2.clone().sub(v1).len();
+    }
+
+    static Rand(scale){
+        return (new Vec()).exec(()=>(Math.random()*2-1)*scale);
+    }
+
+    static Clone({x,y,z}){
+        return new Vec(x,y,z);
+    }
+
+    get x(){ return this.data[0]; }
+    get y(){ return this.data[1]; }
+    get z(){ return this.data[2]; }
+
+    set x(v){ this.data[0] = v; }
+    set y(v){ this.data[1] = v; }
+    set z(v){ this.data[2] = v; }
+
+    clone(){
+        return new Vec(this.x, this.y, this.z);
+    }
+
+    exec(fn){
+        this.data.forEach((v,k,a)=>{
+            a[k] = fn(v, k);
+        });
+        return this;
+    }
+
+    mulp(v){
+        return this.exec((c,k)=>c*v);
+    }
+
+    mul(v){
+        return this.exec((c,k)=>c*v.data[k]);
+    }
+
+    divp(v){
+        return this.exec((c,k)=>c/v);
+    }
+
+    div(v){
+        return this.exec((c,k)=>c/v.data[k]);
+    }
+    subp(v){
+        return this.exec((c,k)=>c-v);
+    }
+    sub(v){
+        return this.exec((c,k)=>c-v.data[k]);
+    }
+
+    addp(v){
+        return this.exec((c,k)=>c+v);
+    }
+    add(v){
+        return this.exec((c,k)=>c+v.data[k]);
+    }
+    len(){
+        return Math.sqrt(
+            Math.pow(this.x, 2)+
+            Math.pow(this.y, 2)+
+            Math.pow(this.z, 2));
+    }
+
+    toString(){
+        return "[Vec "+this.x+" "+this.y+" "+this.z+"] ";
+    }
+}
+
+
+
+
+class Swarm{
     constructor(n){
         this.nextBoidId = 0;
         this.boids = Array(n).fill(null).map(()=>new Boid(this));
+        //this.updateContainer();
+        //console.log(this.container.getNearby(this.boids[0].pos));
+
     }
-    find(pos, radius, id){
-        return this.boids.filter(boid=>{
-            return boid.id !== id && Vec.DistanceSquared(boid.pos, pos) <= radius;
-        })
+
+    updateNeighbors(){
+        for(let j = 0; j < this.boids.length; j++){
+            for(let i = j+1; i < this.boids.length; i++){
+                let boid = this.boids[j];
+                let other = this.boids[i];
+                let x = Math.abs(boid.pos.x - other.pos.x);
+                let y = Math.abs(boid.pos.y - other.pos.y);
+                let z = Math.abs(boid.pos.z - other.pos.z);
+                if(x <= AVOID_RADIUS && y <= AVOID_RADIUS && z <= AVOID_RADIUS){
+                    boid.neighbors.push(other);
+                    other.neighbors.push(boid);
+                    boid.avoiders.push(other);
+                    other.avoiders.push(boid);
+                }else if((x <= GROUP_RADIUS) && (y <= GROUP_RADIUS) && (z <= GROUP_RADIUS)){
+                    boid.neighbors.push(other);
+                    other.neighbors.push(boid);
+                }
+            }
+        }
+
     }
-    update(){
-        this.boids.forEach(boid=>boid.update());
+    find(pos, radius, id, boids = this.boids){
+        //return this.container.getNearby(pos).filter(boid=>{
+        return boids.filter(boid=>{
+            return boid.id !== id &&
+                (Math.abs(boid.pos.x - pos.x) <= radius ) &&
+                (Math.abs(boid.pos.y - pos.y) <= radius ) &&
+                (Math.abs(boid.pos.z - pos.z) <= radius )// &&
+                //Vec.Distance(boid.pos, pos) <= radius;
+        });
+    }
+    update() {
+        /*this.boids.forEach(boid => {
+            boid.neighbors = [];
+            boid.avoiders=[];
+        });*/
+        //this.updateNeighbors();
+        this.boids.forEach(boid => boid.update());
+        //this.boids.forEach(boid => boid.move());
     }
     cursor(a,b){
         this.line = {a,b};
@@ -38,61 +159,53 @@ class Environment{
 
 class Boid{
     constructor(env){
+        this.neighbors = [];
+        this.avoiders = [];
         this.env = env;
         this.id = this.env.nextBoidId++;
-        this.velocity = Vec.Zero();//rand(10.0);
-        this.pos = Vec.rand(20.0);
+        this.velocity = Vec.Rand(10.0);
+        this.pos = Vec.Rand(BOUNDARY);
     }
 
-    center(){
-        let arr = this.env.find(this.pos, GROUP_RADIUS, this.id);
-        if(!arr) return Vec.Zero();
+    center(arr){
+        if(arr.length ==0) return Vec.Zero();
         return arr.reduce((ret, boid)=>{
-            return ret.addInPlace(boid.pos);
+            return ret.add(boid.pos);
         }, Vec.Zero())
-            .scaleInPlace(1.0/arr.length)
-            .subtractInPlace(this.pos)
-            .scaleInPlace(0.1)
+            .divp(arr.length)
+            .sub(this.pos)
+            .divp(10.0)
     }
 
-    heading(){
-        let arr = this.env.find(this.pos, GROUP_RADIUS, this.id);
-        if(!arr) return Vec.Zero();
+    heading(arr){
+        if(arr.length == 0) return Vec.Zero();
         return arr.reduce((ret, boid)=>{
-            return ret.addInPlace(boid.velocity);
+            return ret.add(boid.velocity);
         }, Vec.Zero())
-            .scaleInPlace(1.0/arr.length)
-            .subtractInPlace(this.velocity)
-            .scaleInPlace(0.2)
+            .divp(arr.length)
+            .sub(this.velocity)
+            .divp(2.0)
     }
 
-    avoid(){
-        let arr = this.env.find(this.pos, AVOID_RADIUS, this.id);
+    avoid(arr){
         return arr.reduce((ret, boid)=>{
-            return ret.subtractInPlace(boid.pos.subtract(this.pos));
+            return ret.sub(boid.pos).add(this.pos);
         }, Vec.Zero())
-            .scaleInPlace(0.5)
+            .divp(2.0)
     }
 
     limit_velocity(){
-        if(this.velocity.lengthSquared() > SPEED_LIMIT){
-            this.velocity.scaleInPlace(SPEED_LIMIT/this.velocity.lengthSquared());
+        if(this.velocity.len() > SPEED_LIMIT){
+            this.velocity.divp(this.velocity.len()).mulp(SPEED_LIMIT);
         }
     }
 
     avoid_walls(){
-        let v = Vec.Zero();
-        let pos = this.pos;
-        ['x','y','z'].forEach(k=>{
-            if(pos[k] > BOUNDARY){
-                v[k] = -( pos[k] + BOUNDARY );
-            }else if(pos[k] < -BOUNDARY){
-                v[k] = -( pos[k] - BOUNDARY );
-            }
-        });
-        return v;
+        if(this.pos.len() > BOUNDARY){
+            return this.pos.clone().mulp(-0.1);
+        }
+        return Vec.Zero();
     }
-
 
     avoid_cursor(){
         let p = this.pos;
@@ -120,22 +233,40 @@ class Boid{
     }
 
     update(){
-        let center = this.center();
-        let heading = this.heading();
-        let avoid = this.avoid();
-        let avoidWalls = this.avoid_walls().scale(0.1);
-        let avoidCursor = this.avoid_cursor();
+
+        let neighbors = this.env.find(this.pos, GROUP_RADIUS, this.id);
+        let avoiders = this.env.find(this.pos, AVOID_RADIUS, this.id, neighbors);
+
+//        if(check(neighbors, this.neighbors))
+
+
+        let center = this.center(neighbors);
+        let heading = this.heading(neighbors);
+        let avoid = this.avoid(avoiders);
+        let avoidWalls = this.avoid_walls().mulp(0.1);
+
         this.velocity
-            .addInPlace(center)
-            //.addInPlace(heading)
-            //.addInPlace(avoid)
-            .addInPlace(avoidWalls)
-            .addInPlace(avoidCursor);
+            .add(center)
+            .add(heading)
+            .add(avoid)
+            .add(avoidWalls);
 
         this.limit_velocity();
-
-        this.pos.addInPlace(this.velocity.scale(UPDATE_RATE));
+        this.pos.add(this.velocity.clone().mulp(UPDATE_RATE));
     }
+
+    move(){
+    }
+    /*
+    check(arr1,arr2){
+        let ret = false;
+        arr.forEach(b1=>{
+            if(!arr2.find(b=>b1.id == b.id)){
+                ret = true;
+            }
+        })
+        return ret;
+    }*/
 
 }
 
